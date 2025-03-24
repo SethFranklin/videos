@@ -4,11 +4,6 @@ provider "azurerm" {
   features {}
 }
 
-locals {
-  AZURE_LOCATION      = "East US"
-  AZURE_ADDRESS_SPACE = "10.0.0.0/24"
-}
-
 resource "azurerm_resource_group" "vpn" {
   name     = "vpn"
   location = local.AZURE_LOCATION
@@ -48,6 +43,34 @@ resource "azurerm_network_security_rule" "allow_internet_ssh" {
   direction                   = "Inbound"
 }
 
+resource "azurerm_network_security_rule" "allow_aws_http" {
+  name                        = "allow_aws_http"
+  resource_group_name         = azurerm_resource_group.vpn.name
+  network_security_group_name = azurerm_network_security_group.vpn.name
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = 80
+  source_address_prefix       = local.AWS_ADDRESS_SPACE
+  destination_address_prefix  = "*"
+  access                      = "Allow"
+  priority                    = 300
+  direction                   = "Inbound"
+}
+
+resource "azurerm_network_security_rule" "allow_aws_ping" {
+  name                        = "allow_aws_ping"
+  resource_group_name         = azurerm_resource_group.vpn.name
+  network_security_group_name = azurerm_network_security_group.vpn.name
+  protocol                    = "Icmp"
+  source_port_range           = "*"
+  destination_port_range      = "*"
+  source_address_prefix       = local.AWS_ADDRESS_SPACE
+  destination_address_prefix  = "*"
+  access                      = "Allow"
+  priority                    = 400
+  direction                   = "Inbound"
+}
+
 resource "azurerm_subnet_network_security_group_association" "vpn" {
   subnet_id                 = azurerm_subnet.vpn.id
   network_security_group_id = azurerm_network_security_group.vpn.id
@@ -79,12 +102,12 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
   resource_group_name = azurerm_resource_group.vpn.name
   location            = azurerm_resource_group.vpn.location
   size                = "Standard_B1s"
-  admin_username      = "adminuser"
+  admin_username      = "ubuntu"
 
   network_interface_ids = [azurerm_network_interface.jumpbox.id]
 
   admin_ssh_key {
-    username   = "adminuser"
+    username   = "ubuntu"
     public_key = file(var.ssh_public_key_file)
   }
 
@@ -101,7 +124,7 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
   }
 
   custom_data = base64encode(templatefile("${path.module}/server_startup_script.sh.tftpl", {
-    cloud = "Azure"
+    cloud  = "Azure"
     region = azurerm_resource_group.vpn.location
   }))
 }
