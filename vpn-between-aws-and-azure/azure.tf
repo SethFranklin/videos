@@ -4,9 +4,13 @@ provider "azurerm" {
   features {}
 }
 
+locals {
+  azure_subnet_cidrs = cidrsubnets(local.AZURE_ADDRESS_SPACE, 1, 1)
+}
+
 resource "azurerm_resource_group" "vpn" {
   name     = "vpn"
-  location = local.AZURE_LOCATION
+  location = local.AZURE_REGION
 }
 
 resource "azurerm_virtual_network" "vpn" {
@@ -16,11 +20,96 @@ resource "azurerm_virtual_network" "vpn" {
   address_space       = [local.AZURE_ADDRESS_SPACE]
 }
 
-resource "azurerm_subnet" "vpn" {
-  name                 = "vpn_subnet"
+resource "azurerm_subnet" "jumpbox" {
+  name                 = "vpn_jumpbox"
   resource_group_name  = azurerm_resource_group.vpn.name
   virtual_network_name = azurerm_virtual_network.vpn.name
-  address_prefixes     = [local.AZURE_ADDRESS_SPACE]
+  address_prefixes     = [local.azure_subnet_cidrs[0]]
+}
+
+resource "azurerm_subnet" "vpn" {
+  name                 = "GatewaySubnet"
+  resource_group_name  = azurerm_resource_group.vpn.name
+  virtual_network_name = azurerm_virtual_network.vpn.name
+  address_prefixes     = [local.azure_subnet_cidrs[1]]
+}
+
+resource "azurerm_public_ip" "vpn" {
+  name                = "vpn_gateway_public_ip"
+  location            = azurerm_resource_group.vpn.location
+  resource_group_name = azurerm_resource_group.vpn.name
+  allocation_method   = "Dynamic"
+  sku                 = "Basic"
+}
+
+data "azurerm_public_ip" "vpn" {
+  name                = azurerm_public_ip.vpn.name
+  resource_group_name = azurerm_resource_group.vpn.name
+  depends_on          = [azurerm_virtual_network_gateway.vpn]
+}
+
+resource "azurerm_virtual_network_gateway" "vpn" {
+  name                = "vpn_gateway"
+  location            = azurerm_resource_group.vpn.location
+  resource_group_name = azurerm_resource_group.vpn.name
+
+  type     = "Vpn"
+  vpn_type = "RouteBased"
+
+  active_active = false
+  enable_bgp    = false
+  sku           = "Basic"
+
+  ip_configuration {
+    name                          = "vnetGatewayConfig"
+    public_ip_address_id          = azurerm_public_ip.vpn.id
+    private_ip_address_allocation = "Dynamic"
+    subnet_id                     = azurerm_subnet.vpn.id
+  }
+
+  vpn_client_configuration {
+    address_space = [local.AWS_ADDRESS_SPACE]
+  }
+}
+
+resource "azurerm_local_network_gateway" "vpn_tunnel1" {
+  name                = "vpn_local_network_gateway_tunnel1"
+  resource_group_name = azurerm_resource_group.vpn.name
+  location            = azurerm_resource_group.vpn.location
+  gateway_address     = aws_vpn_connection.vpn.tunnel1_address
+  address_space       = [local.AWS_ADDRESS_SPACE]
+}
+
+resource "azurerm_virtual_network_gateway_connection" "vpn_tunnel1" {
+  name                = "local_network_gateway_connection_tunnel1"
+  location            = azurerm_resource_group.vpn.location
+  resource_group_name = azurerm_resource_group.vpn.name
+
+  type                       = "IPsec"
+  virtual_network_gateway_id = azurerm_virtual_network_gateway.vpn.id
+  local_network_gateway_id   = azurerm_local_network_gateway.vpn_tunnel1.id
+
+  shared_key = random_string.tunnel1_preshared_key.result
+}
+
+resource "azurerm_local_network_gateway" "vpn_tunnel2" {
+  name                = "vpn_local_network_gateway_tunnel2"
+  resource_group_name = azurerm_resource_group.vpn.name
+  location            = azurerm_resource_group.vpn.location
+  gateway_address     = aws_vpn_connection.vpn.tunnel2_address
+  address_space       = [local.AWS_ADDRESS_SPACE]
+}
+
+resource "azurerm_virtual_network_gateway_connection" "vpn_tunnel2" {
+  name                = "local_network_gateway_connection_tunnel2"
+  location            = azurerm_resource_group.vpn.location
+  resource_group_name = azurerm_resource_group.vpn.name
+
+  type                       = "IPsec"
+  virtual_network_gateway_id = azurerm_virtual_network_gateway.vpn.id
+  local_network_gateway_id   = azurerm_local_network_gateway.vpn_tunnel2.id
+
+  shared_key = random_string.tunnel2_preshared_key.result
 }
 
 resource "azurerm_network_security_group" "vpn" {
@@ -72,7 +161,7 @@ resource "azurerm_network_security_rule" "allow_aws_ping" {
 }
 
 resource "azurerm_subnet_network_security_group_association" "vpn" {
-  subnet_id                 = azurerm_subnet.vpn.id
+  subnet_id                 = azurerm_subnet.jumpbox.id
   network_security_group_id = azurerm_network_security_group.vpn.id
 }
 
@@ -90,9 +179,9 @@ resource "azurerm_network_interface" "jumpbox" {
 
   ip_configuration {
     name                          = "internal"
-    subnet_id                     = azurerm_subnet.vpn.id
+    subnet_id                     = azurerm_subnet.jumpbox.id
     private_ip_address_allocation = "Static"
-    private_ip_address            = cidrhost(one(azurerm_subnet.vpn.address_prefixes), 4)
+    private_ip_address            = cidrhost(one(azurerm_subnet.jumpbox.address_prefixes), 4)
     public_ip_address_id          = azurerm_public_ip.jumpbox.id
   }
 }

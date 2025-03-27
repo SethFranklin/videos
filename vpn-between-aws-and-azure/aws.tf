@@ -28,8 +28,8 @@ resource "aws_vpn_gateway" "vpn" {
 }
 
 resource "aws_customer_gateway" "vpn" {
-  bgp_asn    = local.AZURE_SIDE_ASN
-  ip_address = "172.83.124.10" # Replace with Azure IP address?
+  bgp_asn    = 65000
+  ip_address = data.azurerm_public_ip.vpn.ip_address
   type       = "ipsec.1"
 
   tags = {
@@ -41,7 +41,7 @@ resource "aws_vpn_connection" "vpn" {
   vpn_gateway_id      = aws_vpn_gateway.vpn.id
   customer_gateway_id = aws_customer_gateway.vpn.id
   type                = "ipsec.1"
-  # static_routes_only  = true
+  static_routes_only  = true
 
   tunnel1_preshared_key = random_string.tunnel1_preshared_key.result
   tunnel2_preshared_key = random_string.tunnel2_preshared_key.result
@@ -49,6 +49,11 @@ resource "aws_vpn_connection" "vpn" {
   tags = {
     Name = "vpn_vpn_connection"
   }
+}
+
+resource "aws_vpn_connection_route" "azure_bound_route" {
+  destination_cidr_block = local.AZURE_ADDRESS_SPACE
+  vpn_connection_id      = aws_vpn_connection.vpn.id
 }
 
 resource "aws_subnet" "vpn" {
@@ -113,6 +118,7 @@ resource "aws_vpc_security_group_ingress_rule" "allow_azure_http" {
   from_port   = 80
   to_port     = 80
 }
+
 resource "aws_vpc_security_group_ingress_rule" "allow_azure_ping" {
   security_group_id = aws_security_group.jumpbox.id
 
@@ -122,6 +128,13 @@ resource "aws_vpc_security_group_ingress_rule" "allow_azure_ping" {
   to_port     = -1
 }
 
+resource "aws_vpc_security_group_egress_rule" "allow_all_outbound" {
+  security_group_id = aws_security_group.jumpbox.id
+
+  cidr_ipv4   = "0.0.0.0/0"
+  ip_protocol = -1
+}
+
 resource "aws_network_interface" "jumpbox" {
   subnet_id       = aws_subnet.vpn.id
   private_ips     = [cidrhost(aws_subnet.vpn.cidr_block, 4)]
@@ -129,9 +142,8 @@ resource "aws_network_interface" "jumpbox" {
 }
 
 resource "aws_eip" "jumpbox" {
-  domain                    = "vpc"
-  network_interface         = aws_network_interface.jumpbox.id
-  associate_with_private_ip = one(aws_network_interface.jumpbox.private_ips)
+  domain   = "vpc"
+  instance = aws_instance.jumpbox.id
 }
 
 data "aws_ami" "jumpbox" {
