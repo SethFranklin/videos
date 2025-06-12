@@ -1,0 +1,16 @@
+FROM docker.io/library/golang:latest AS build
+
+WORKDIR /app
+
+COPY go/main.go ./
+RUN go build --ldflags "-s -w" -o /bin/main main.go
+
+FROM docker.io/library/busybox:latest
+
+WORKDIR /app
+COPY html html
+
+WORKDIR /app/go
+COPY --from=build /bin/main main
+
+CMD ["./main"]
