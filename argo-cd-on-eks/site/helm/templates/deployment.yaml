@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: site
+  labels:
+    app: site
+spec:
+  replicas: {{ .Values.defaultReplicas }}
+  selector:
+    matchLabels:
+      app: site
+  template:
+    metadata:
+      labels:
+        app: site
+    spec:
+      containers:
+        - name: site
+          image: {{ .Values.imageName }}
+          resources:
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
+              memory: 600Mi
+          env:
+            - name: SITE_ENV
+              value: {{ .Values.environment }}
+            - name: SITE_PORT
+              value: "{{ .Values.appPort }}"
+          ports:
+            - containerPort: {{ .Values.appPort }}

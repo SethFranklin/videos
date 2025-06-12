@@ -25,8 +25,12 @@ func main() {
 	if pageData.Environment == "" {
 		pageData.Environment = "SITE_ENV not set"
 	}
+	port := os.Getenv("SITE_PORT")
+	if port == "" {
+		port = "8080"
+	}
 	http.HandleFunc("/", handler)
-	log.Fatal(http.ListenAndServe("localhost:8080", nil))
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {

@@ -1,0 +1,15 @@
+appPort: 8080
+imageName: sethfranklin/site
+environment: local
+
+defaultReplicas: 1
+minReplicas: 1
+maxReplicas: 1
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 300Mi
+  limits:
+    cpu: 1
+    memory: 600Mi
