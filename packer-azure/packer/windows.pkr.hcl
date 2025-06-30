@@ -5,7 +5,7 @@ source "azure-arm" "windows" {
   image_publisher = "MicrosoftWindowsServer"
   image_sku       = "2025-datacenter-g2"
 
-  vm_size = "Standard_B1s"
+  vm_size = "Standard_D2s_v3"
 
   virtual_network_resource_group_name = "packer"
   virtual_network_name                = "packer_vnet"

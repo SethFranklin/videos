@@ -91,7 +91,7 @@ resource "azurerm_windows_virtual_machine" "windowsiis" {
   name                = "windowsiis"
   resource_group_name = data.azurerm_resource_group.packer.name
   location            = data.azurerm_resource_group.packer.location
-  size                = "Standard_B1s"
+  size                = "Standard_D2s_v3"
   admin_username      = "adminuser"
   admin_password      = "P@$$w0rd1234!"
 
